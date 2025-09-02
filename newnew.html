@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Slushies - Save while drinking</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+    header { text-align: center; padding: 20px 0; background: #f0f0f0; }
+    header h1 { margin: 0; }
+    header p { margin: 5px 0 0 0; font-style: italic; }
+    .form-container { display: none; margin-top: 20px; }
+    .active { display: block; }
+    .nav-buttons { margin: 20px 0; }
+    input, button, select { padding: 8px; margin: 5px 0; }
+    #bankingModal {
+      display: none; position: fixed; z-index: 10; top: 50%; left: 50%;
+      transform: translate(-50%, -50%); background: #fff; border: 1px solid #ccc; padding: 20px;
+    }
+    #bankingModal button { margin-top: 10px; }
+    .footer { text-align: center; margin-top: 40px; cursor: pointer; color: #888; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    table, th, td { border: 1px solid #ccc; }
+    th, td { padding: 8px; text-align: left; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Slushies</h1>
+    <p>Save while drinking</p>
+  </header>
+
+  <!-- Navigation Buttons -->
+  <div class="nav-buttons">
+    <button onclick="showForm('orderForm')">Customer Order Form</button>
+    <button onclick="showForm('loginForm')">Admin Login</button>
+  </div>
+
+  <!-- Order Form (default Customer Order Form) -->
+  <div id="orderForm" class="form-container active">
+    <h2>Products Available</h2>
+    <div id="productList"></div>
+    <h3>Your Cart</h3>
+    <div id="cart"></div>
+    <h3>Customer Information</h3>
+    <label>Surname: <input type="text" id="custSurname"></label><br>
+    <label>Initial: <input type="text" id="custInitial"></label><br>
+    <label>Gender: 
+      <select id="custGender">
+        <option value="Male">Male</option>
+        <option value="Female">Female</option>
+      </select>
+    </label><br>
+    <label>Payment Type: 
+      <select id="custPayment" onchange="toggleBankingDetail()">
+        <option value="Cash">Cash</option>
+        <option value="Card">Card</option>
+      </select>
+    </label><br>
+    <button onclick="placeOrder()">Place Order</button>
+  </div>
+
+  <!-- Admin Login Form -->
+  <div id="loginForm" class="form-container">
+    <h2>Admin Login</h2>
+    <label>Username: <input type="text" id="adminUser"></label><br>
+    <label>Password: <input type="password" id="adminPass"></label><br>
+    <button onclick="adminLogin()">Login</button>
+  </div>
+
+  <!-- Admin Form -->
+  <div id="adminForm" class="form-container">
+    <h2>Admin Panel</h2>
+    <button onclick="showOrders()">View Orders</button>
+    <h3>Product Management</h3>
+    <label>Product Name: <input type="text" id="prodName"></label><br>
+    <label>Price: <input type="number" id="prodPrice"></label><br>
+    <label>Picture URL: <input type="text" id="prodPic"></label><br>
+    <label>Quantity: <input type="number" id="prodQty"></label><br>
+    <button onclick="addOrUpdateProduct()">Add/Update Product</button>
+    <button onclick="deleteProduct()">Delete Product</button>
+
+    <h3>Order Records</h3>
+    <div id="orderRecords"></div>
+    <button onclick="downloadOrders()">Download Orders</button>
+    <div class="footer" onclick="showForm('loginForm')">&copy;</div>
+  </div>
+
+  <!-- Banking Detail Modal -->
+  <div id="bankingModal">
+    <h3>Banking Details</h3>
+    <p>Bank Name: Slushies Bank</p>
+    <p>Admin Surname & Initials: Doe J.</p>
+    <p>Account Number: 1234567890</p>
+    <p>Account Cell Number: +123456789</p>
+    <button onclick="copyBankingDetails()">Copy Details</button>
+    <button onclick="closeBankingModal()">Close</button>
+  </div>
+
+  <script>
+    // Sample product data & order records
+    let products = [
+      { id: 1, name: "Strawberry Slush", price: 5, pic: "", qty: 10 }
+    ];
+    let cart = [];
+    let orders = [];
+    let orderCounter = 1; // starting from 1 ("01") daily
+
+    // Utility to format order number as two digits
+    function formatOrderNumber(n) {
+      return n < 10 ? "0" + n : n;
+    }
+
+    // Render Products List for Customers
+    function renderProducts() {
+      const productList = document.getElementById('productList');
+      productList.innerHTML = "";
+      products.forEach(prod => {
+        const prodDiv = document.createElement('div');
+        prodDiv.innerHTML = `
+          <strong>${prod.name}</strong> - $$${prod.price} 
+          <button onclick="addToCart(${prod.id})">Add to Cart</button>
+        `;
+        productList.appendChild(prodDiv);
+      });
+    }
+
+    // Render cart
+    function renderCart() {
+      const cartDiv = document.getElementById('cart');
+      cartDiv.innerHTML = "";
+      cart.forEach(item => {
+        const itemDiv = document.createElement('div');
+        itemDiv.innerHTML = `
+          ${item.name} - Quantity: 
+          <button onclick="updateCart(${item.id}, -1)">-</button>
+          ${item.selectedQty}
+          <button onclick="updateCart(${item.id}, 1)">+</button>
+        `;
+        cartDiv.appendChild(itemDiv);
+      });
+    }
+
+    // Add product to cart
+    function addToCart(id) {
+      let prod = products.find(p => p.id === id);
+      let existing = cart.find(item => item.id === id);
+      if (existing) {
+        updateCart(id, 1);
+      } else {
+        cart.push({ ...prod, selectedQty: 1 });
+      }
+      renderCart();
+    }
+
+    // Update cart quantities
+    function updateCart(id, delta) {
+      let item = cart.find(i => i.id === id);
+      if (item) {
+        item.selectedQty += delta;
+        if (item.selectedQty <= 0) {
+          cart = cart.filter(i => i.id !== id);
+        }
+      }
+      renderCart();
+    }
+
+    // Toggle banking detail modal for Card payment
+    function toggleBankingDetail() {
+      let paymentType = document.getElementById('custPayment').value;
+      if (paymentType === "Card") {
+        document.getElementById('bankingModal').style.display = 'block';
+      }
+    }
+
+    function closeBankingModal() {
+      document.getElementById('bankingModal').style.display = 'none';
+    }
+
+    function copyBankingDetails() {
+      // Simulate copy functionality
+      const details = "Bank Name: Slushies Bank\nAdmin: Doe J.\nAccount: 1234567890\nCell: +123456789";
+      navigator.clipboard.writeText(details);
+      alert("Banking details copied!");
+    }
+
+    // Place Order Functionality
+    function placeOrder() {
+      if (cart.length === 0) { alert("Cart is empty!"); return; }
+      const surname = document.getElementById('custSurname').value;
+      const initial = document.getElementById('custInitial').value;
+      const gender = document.getElementById('custGender').value;
+      const payment = document.getElementById('custPayment').value;
+      if (!surname || !initial) { alert("Fill in your details."); return; }
+      const now = new Date();
+      const orderNum = formatOrderNumber(orderCounter++);
+      const orderDetails = {
+        orderNumber: orderNum,
+        date: now.toLocaleDateString(),
+        time: now.toLocaleTimeString(),
+        customer: { surname, initial, gender, payment },
+        products: JSON.parse(JSON.stringify(cart))
+      };
+      orders.push(orderDetails);
+      orders.sort((a, b) => (a.orderNumber - b.orderNumber));
+      // Simulate sending order details via WhatsApp
+      const msg = encodeURIComponent(`New Order:\nOrder No: ${orderNum}\nCustomer: ${surname} ${initial}\nProducts: ${cart.map(p => p.name + " (Qty:" + p.selectedQty + ")").join(", ")}\nDate: ${now.toLocaleString()}`);
+      window.open(`https://wa.me/27827662555?text=${msg}`, '_blank');
+      alert("Order placed!");
+      // Reset cart and customer details
+      cart = [];
+      renderCart();
+      document.getElementById('custSurname').value = "";
+      document.getElementById('custInitial').value = "";
+      document.getElementById('custGender').selectedIndex = 0;
+      document.getElementById('custPayment').selectedIndex = 0;
+      closeBankingModal();
+    }
+
+    // Admin login simulation (hardcoded username/password)
+    function adminLogin() {
+      const user = document.getElementById('adminUser').value;
+      const pass = document.getElementById('adminPass').value;
+      if(user === "admin" && pass === "password") {
+        showForm('adminForm');
+        renderOrders();
+      } else {
+        alert("Invalid credentials");
+      }
+    }
+
+    // Render order records in admin panel
+    function renderOrders() {
+      let orderRecords = document.getElementById('orderRecords');
+      if(orders.length === 0) {
+        orderRecords.innerHTML = "<p>No orders yet.</p>";
+        return;
+      }
+      let html = "<table><tr><th>Order No</th><th>Date</th><th>Time</th><th>Customer</th><th>Products</th></tr>";
+      orders.forEach(o => {
+        html += `<tr>
+          <td>${o.orderNumber}</td>
+          <td>${o.date}</td>
+          <td>${o.time}</td>
+          <td>${o.customer.surname} ${o.customer.initial} (${o.customer.gender}) - ${o.customer.payment}</td>
+          <td>${o.products.map(p => p.name + " (Qty:" + p.selectedQty + ")").join(", ")}</td>
+        </tr>`;
+      });
+      html += "</table>";
+      orderRecords.innerHTML = html;
+    }
+
+    // Show orders view (for admin)
+    function showOrders() {
+      renderOrders();
+    }
+
+    // Add or Update Product (for admin)
+    function addOrUpdateProduct() {
+      const name = document.getElementById('prodName').value;
+      const price = parseFloat(document.getElementById('prodPrice').value);
+      const pic = document.getElementById('prodPic').value;
+      const qty = parseInt(document.getElementById('prodQty').value);
+      if (!name || isNaN(price) || isNaN(qty)) { alert("Fill in product details correctly."); return; }
+      // Check if product exists; if so, update
+      let existing = products.find(p => p.name === name);
+      if(existing) {
+        existing.price = price;
+        existing.pic = pic;
+        existing.qty = qty;
+      } else {
+        products.push({ id: products.length+1, name, price, pic, qty });
+      }
+      alert("Product added/updated!");
+      renderProducts();
+    }
+
+    // Delete product (for admin)
+    function deleteProduct() {
+      const name = document.getElementById('prodName').value;
+      products = products.filter(p => p.name !== name);
+      alert("Product deleted (if existed)!");
+      renderProducts();
+    }
+
+    // Download orders as text file
+    function downloadOrders() {
+      let text = orders.map(o => {
+        return `Order No: ${o.orderNumber}\nDate: ${o.date}\nTime: ${o.time}\nCustomer: ${o.customer.surname} ${o.customer.initial} (${o.customer.gender}) - ${o.customer.payment}\nProducts: ${o.products.map(p => p.name + " (Qty:" + p.selectedQty + ")").join(", ")}\n`;
+      }).join("\n-----------------\n");
+      let blob = new Blob([text], {type: "text/plain"});
+      let a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = "orders.txt";
+      a.click();
+    }
+
+    // Switch between forms
+    function showForm(formId) {
+      document.querySelectorAll('.form-container').forEach(el => {
+        el.classList.remove('active');
+      });
+      document.getElementById(formId).classList.add('active');
+    }
+
+    // Reset order counter at end of day simulation (for demo, you might call this manually)
+    function resetOrderCounter() {
+      orderCounter = 1;
+    }
+
+    // Initial rendering of products list
+    renderProducts();
+  </script>
+</body>
+</html>
